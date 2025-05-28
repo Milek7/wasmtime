@@ -4,6 +4,7 @@ use crate::{
     wasmtime_error_t,
 };
 use anyhow::Context;
+use std::ffi::c_void;
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use wasmtime::{Engine, Module};
@@ -225,6 +226,28 @@ pub unsafe extern "C" fn wasmtime_module_deserialize_file(
         .to_str()
         .context("input path is not valid utf-8")
         .and_then(|path| Module::deserialize_file(&engine.engine, path));
+    handle_result(result, |module| {
+        *out = Box::into_raw(Box::new(wasmtime_module_t { module }));
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wasmtime_module_from_premapped_image(
+    engine: &wasm_engine_t,
+    image: *const u8,
+    size: usize,
+    data: *mut c_void,
+    finalizer: Option<extern "C" fn(*mut c_void)>,
+    out: &mut *mut wasmtime_module_t,
+) -> Option<Box<wasmtime_error_t>> {
+    let foreign = crate::ForeignData { data, finalizer };
+    let result = Module::deserialize_raw(
+        &engine.engine,
+        std::slice::from_raw_parts(image, size).into(),
+        //move || {
+        //    let _ = &foreign;
+        //},
+    );
     handle_result(result, |module| {
         *out = Box::into_raw(Box::new(wasmtime_module_t { module }));
     })
